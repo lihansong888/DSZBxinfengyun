@@ -1,0 +1,38 @@
+name: build-hs
+
+on:
+  schedule:
+    - cron: '0 */3 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Fetch and regroup
+        run: |
+          curl -fsSL --retry 3 --connect-timeout 15 --max-time 60 \
+            https://lihansong.top/iptv/src/fytv.m3u -o raw.m3u
+          grep -q '#EXTM3U' raw.m3u
+
+          G='HS風雲港澳臺頻道'
+          tr -d '\r' < raw.m3u \
+            | sed -E "s/group-title=\"[^\"]*\"/group-title=\"$G\"/" \
+            | sed -E "/^#EXTINF/{/group-title=/!s/^#EXTINF:(-?[0-9]+)/#EXTINF:\1 group-title=\"$G\"/}" \
+            > HS.m3u
+
+          echo "channels: $(grep -c '^#EXTINF' HS.m3u)"
+          head -n 6 HS.m3u
+
+      - name: Commit
+        run: |
+          git config user.name "github-actions"
+          git config user.email "actions@github.com"
+          git add HS.m3u
+          git diff --cached --quiet || (git commit -m "update $(date -u +'%F %H:%M')" && git push)
